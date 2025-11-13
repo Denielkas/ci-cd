@@ -66,7 +66,6 @@ jobs:
       # (Opcional, só na primeira vez) Aplica os manifests estáticos se ainda não existirem
       - name: Apply base manifests (primeira vez / idempotente)
         run: |
-          # aplica sem falhar se faltar algum arquivo
           kubectl apply -n "$NAMESPACE" -f k8s/service.yaml || true
           kubectl apply -n "$NAMESPACE" -f k8s/prometheus-config.yaml || true
           kubectl apply -n "$NAMESPACE" -f k8s/prometheus-deployment.yaml || true
@@ -88,4 +87,3 @@ jobs:
       - name: Mostrar recursos (debug)
         run: |
           kubectl get deploy,svc,pods -o wide -n "$NAMESPACE"
-
