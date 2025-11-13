@@ -1,0 +1,11 @@
+﻿{
+  "agentId": 2,
+  "agentName": "DENIELKAS",
+  "poolId": 1,
+  "poolName": "Default",
+  "serverUrl": "https://pipelinesghubeus25.actions.githubusercontent.com/PrQOZAEEike9r8NQTpztKIejdTxyplFjNqQkQw1B0UdjuvcAeS/",
+  "gitHubUrl": "https://github.com/Denielkas/ci-cd",
+  "workFolder": "_work",
+  "useV2Flow": true,
+  "serverUrlV2": "https://broker.actions.githubusercontent.com/"
+}
