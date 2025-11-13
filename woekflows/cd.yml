@@ -1,0 +1,90 @@
+name: CD - Deploy to Kubernetes
+
+on:
+  workflow_run:
+    workflows: ["CI - Build & Push Docker"]
+    types: ["completed"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: >
+      ${{
+        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+        || github.event_name == 'workflow_dispatch'
+      }}
+    runs-on: ubuntu-latest
+    environment: production  # opcional: exige aprovação via Environments
+
+    env:
+      IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/teste
+      NAMESPACE: ${{ secrets.K8S_NAMESPACE || 'trabalho' }}
+      DEPLOYMENT: teste
+      CONTAINER: teste
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Descobre o SHA do commit do CI que disparou este CD (ou o atual, se manual)
+      - name: Resolve SHORT_SHA
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            SHA="${GITHUB_SHA}"
+          fi
+          echo "FULL_SHA=$SHA" >> $GITHUB_ENV
+          echo "SHORT_SHA=${SHA:0:7}" >> $GITHUB_ENV
+          echo "Usando tag: ${SHA:0:7}"
+
+      - name: Instalar kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "latest"
+
+      - name: Configurar kubeconfig (via KUBE_CONFIG_DATA)
+        env:
+          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
+        run: |
+          mkdir -p ~/.kube
+          echo "$KUBE_CONFIG_DATA" | base64 -d > ~/.kube/config
+
+      - name: Verificar cluster
+        run: |
+          kubectl version --client=true
+          kubectl cluster-info
+          kubectl get ns
+
+      - name: Criar namespace se não existir
+        run: |
+          kubectl get ns "$NAMESPACE" || kubectl create ns "$NAMESPACE"
+
+      # (Opcional, só na primeira vez) Aplica os manifests estáticos se ainda não existirem
+      - name: Apply base manifests (primeira vez / idempotente)
+        run: |
+          # aplica sem falhar se faltar algum arquivo
+          kubectl apply -n "$NAMESPACE" -f k8s/service.yaml || true
+          kubectl apply -n "$NAMESPACE" -f k8s/prometheus-config.yaml || true
+          kubectl apply -n "$NAMESPACE" -f k8s/prometheus-deployment.yaml || true
+          kubectl apply -n "$NAMESPACE" -f k8s/grafana-deployment.yaml || true
+          kubectl apply -n "$NAMESPACE" -f k8s/grafana-service.yaml || true
+          # seu deployment do app
+          kubectl apply -n "$NAMESPACE" -f k8s/deployment.yaml || true
+
+      # Atualiza a imagem do Deployment "teste" (container "teste") para a tag do commit
+      - name: Set image to new tag
+        run: |
+          kubectl -n "$NAMESPACE" set image deployment/$DEPLOYMENT \
+            $CONTAINER=${IMAGE_NAME}:${SHORT_SHA} --record
+
+      - name: Aguardar rollout
+        run: |
+          kubectl -n "$NAMESPACE" rollout status deployment/$DEPLOYMENT --timeout=180s
+
+      - name: Mostrar recursos (debug)
+        run: |
+          kubectl get deploy,svc,pods -o wide -n "$NAMESPACE"
