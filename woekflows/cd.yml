@@ -88,3 +88,4 @@ jobs:
       - name: Mostrar recursos (debug)
         run: |
           kubectl get deploy,svc,pods -o wide -n "$NAMESPACE"
+
