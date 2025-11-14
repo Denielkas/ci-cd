@@ -10,10 +10,9 @@ permissions:
 
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
-    runs-on: self-hosted  # Usando o self-hosted runner
-
-    environment: production # opcional: exige aprovação
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}  # Executar apenas se o CI for bem-sucedido
+    runs-on: ubuntu-latest  # Usando o runner Ubuntu
+    environment: production  # Opcional: exige aprovação
 
     steps:
       - name: Checkout
@@ -22,53 +21,55 @@ jobs:
       - name: Set vars
         id: vars
         run: |
-          echo "IMAGE=seuusuario/monitor" >> $GITHUB_OUTPUT
-          echo "TAG_SHA=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-          echo "NAMESPACE=${{ secrets.K8S_NAMESPACE || 'default' }}" >> $GITHUB_OUTPUT
+          echo "IMAGE=seuusuario/monitor" >> $GITHUB_ENV  # Corrigido para $GITHUB_ENV
+          echo "TAG_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "NAMESPACE=${{ secrets.K8S_NAMESPACE || 'default' }}" >> $GITHUB_ENV  # Variável de namespace
+
+      - name: Debug workflow run
+        run: |
+          echo "IMAGE=${{ secrets.IMAGE }}"
+          echo "TAG_SHA=${{ secrets.TAG_SHA }}"
+          echo "NAMESPACE=${{ secrets.NAMESPACE }}"
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
         with:
           version: 'latest'
 
-      # Configuração manual para o Kubernetes, sem kubeconfig
-      - name: Configure Kubernetes Access (manual)
+      - name: Configure kubeconfig
         run: |
-          kubectl config set-cluster my-cluster --server=https://your-cluster-api-server --certificate-authority=/home/runner/.kube/ca.crt
-          kubectl config set-credentials my-user --token=${{ secrets.K8S_TOKEN }}
-          kubectl config set-context my-context --cluster=my-cluster --user=my-user --namespace=${{ steps.vars.outputs.NAMESPACE }}
-          kubectl config use-context my-context
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 -d > $HOME/.kube/config  # Decodificar o kubeconfig
 
       - name: Create namespace if not exists
         run: |
-          kubectl get ns ${{ steps.vars.outputs.NAMESPACE }} || \
-          kubectl create ns ${{ steps.vars.outputs.NAMESPACE }}
+          kubectl get ns ${{ secrets.NAMESPACE }} || kubectl create ns ${{ secrets.NAMESPACE }}  # Criação do namespace, se necessário
 
       # Aplica/garante os serviços/ingress/etc. estáticos (opcional na primeira vez)
       - name: Apply base manifests (Service, Prometheus, Grafana, Nginx)
         run: |
-          kubectl apply -n ${{ steps.vars.outputs.NAMESPACE }} -f k8s/service.yaml || true
-          kubectl apply -n ${{ steps.vars.outputs.NAMESPACE }} -f k8s/prometheus-deployment.yaml || true
-          kubectl apply -n ${{ steps.vars.outputs.NAMESPACE }} -f k8s/grafana-deployment.yaml || true
-          kubectl apply -n ${{ steps.vars.outputs.NAMESPACE }} -f k8s/nginx-deployment.yaml || true
-          kubectl apply -n ${{ steps.vars.outputs.NAMESPACE }} -f k8s/nginx-service.yaml || true
-          kubectl apply -n ${{ steps.vars.outputs.NAMESPACE }} -f k8s/prometheus-config.yaml || true
+          kubectl apply -n ${{ secrets.NAMESPACE }} -f k8s/service.yaml || true
+          kubectl apply -n ${{ secrets.NAMESPACE }} -f k8s/prometheus-deployment.yaml || true
+          kubectl apply -n ${{ secrets.NAMESPACE }} -f k8s/grafana-deployment.yaml || true
+          kubectl apply -n ${{ secrets.NAMESPACE }} -f k8s/nginx-deployment.yaml || true
+          kubectl apply -n ${{ secrets.NAMESPACE }} -f k8s/nginx-service.yaml || true
+          kubectl apply -n ${{ secrets.NAMESPACE }} -f k8s/prometheus-config.yaml || true
 
       # Aplica/garante o Deployment (se ainda não existir)
       - name: Apply app deployment (first time)
         run: |
-          kubectl apply -n ${{ steps.vars.outputs.NAMESPACE }} -f k8s/deployment.yaml
+          kubectl apply -n ${{ secrets.NAMESPACE }} -f k8s/deployment.yaml
 
       # Atualiza a imagem para a tag nova (idempotente)
       - name: Set image to new tag
         run: |
-          kubectl set image deployment/monitor monitor=${{ steps.vars.outputs.IMAGE }}:${{ steps.vars.outputs.TAG_SHA }} -n ${{ steps.vars.outputs.NAMESPACE }}
+          kubectl set image deployment/monitor monitor=${{ secrets.IMAGE }}:${{ secrets.TAG_SHA }} -n ${{ secrets.NAMESPACE }}
 
       - name: Wait rollout
         run: |
-          kubectl rollout status deployment/monitor -n ${{ steps.vars.outputs.NAMESPACE }} --timeout=120s
+          kubectl rollout status deployment/monitor -n ${{ secrets.NAMESPACE }} --timeout=120s  # Aguarda o rollout do deployment
 
       - name: Show services (debug)
         run: |
-          kubectl get svc -n ${{ steps.vars.outputs.NAMESPACE }}
-          kubectl get pods -o wide -n ${{ steps.vars.outputs.NAMESPACE }}
+          kubectl get svc -n ${{ secrets.NAMESPACE }}
+          kubectl get pods -o wide -n ${{ secrets.NAMESPACE }}
