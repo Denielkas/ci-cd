@@ -1,0 +1,12 @@
+﻿{
+  "repositoryName": "Denielkas/ci-cd",
+  "pipelineDirectory": "ci-cd",
+  "workspaceDirectory": "ci-cd\\ci-cd",
+  "repositories": {
+    "Denielkas/ci-cd": {
+      "repositoryPath": "ci-cd\\ci-cd",
+      "lastRunOn": "11/13/2025 21:43:13 -03:00"
+    }
+  },
+  "lastRunOn": "11/13/2025 21:43:13 -03:00"
+}
