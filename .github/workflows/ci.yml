@@ -25,7 +25,7 @@ jobs:
           else
             npm install
           fi
-      - name: Run tests (se tiver)
+      - name: Run  (se tiver)
         run: |
           if npm run | grep -q "test"; then
             npm test
