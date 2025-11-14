@@ -10,10 +10,9 @@ permissions:
 
 jobs:
   deploy:
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: self-hosted  # Usando o self-hosted runner
 
-    environment: production # opcional: exige aprovação
+    environment: production  # opcional: exige aprovação
 
     steps:
       - name: Checkout
@@ -22,9 +21,9 @@ jobs:
       - name: Set vars
         id: vars
         run: |
-          echo "IMAGE=seuusuario/monitor" >> $GITHUB_OUTPUT
-          echo "TAG_SHA=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-          echo "NAMESPACE=${{ secrets.K8S_NAMESPACE || 'default' }}" >> $GITHUB_OUTPUT
+          echo "IMAGE=seuusuario/monitor" >> $GITHUB_ENV
+          echo "TAG_SHA=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "NAMESPACE=${{ secrets.K8S_NAMESPACE || 'default' }}" >> $GITHUB_ENV
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v4
@@ -35,15 +34,6 @@ jobs:
         run: |
           mkdir -p $HOME/.kube
           echo "${{ secrets.KUBE_CONFIG_DATA }}" | base64 -d > $HOME/.kube/config
-
-      # Configuração de acesso manual ao Kubernetes sem alterar o kubeconfig
-      - name: Manual Kubernetes Setup (optional)
-        run: |
-          echo "Configuring Kubernetes manually..."
-          kubectl config set-cluster my-cluster --server=https://your-cluster-api-server --certificate-authority=/home/runner/.kube/ca.crt
-          kubectl config set-credentials my-user --token=${{ secrets.K8S_TOKEN }}
-          kubectl config set-context my-context --cluster=my-cluster --user=my-user --namespace=${{ steps.vars.outputs.NAMESPACE }}
-          kubectl config use-context my-context
 
       - name: Create namespace if not exists
         run: |
